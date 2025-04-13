@@ -18,9 +18,9 @@ async fn setup_environment() {
 
     let env_vars = [
         ("UUID", "66e5c8dd-3176-458e-8fb0-1ed91d2f9602"),
-        ("NEZHA_SERVER", "nz-data.pbot.eu.org"),
-        ("NEZHA_PORT", "443"),
-        ("NEZHA_KEY", "3KTPhxtireYi4L1s5OTpsm2ZHYDc9eve"),
+        ("NEZHA_SERVER", "nz.abc.com"),
+        ("NEZHA_PORT", "5555"),
+        ("NEZHA_KEY", ""),
         ("ARGO_DOMAIN", ""),  // argo固定隧道也可在scrects中添加环境变量
         ("ARGO_AUTH", ""),    // argo密钥，留空将使用临时隧道
         ("CFIP", "www.visa.com.tw"),
@@ -232,12 +232,12 @@ async fn download_files() {
         "arm" | "arm64" | "aarch64" => vec![
             ("https://amd64.ssss.nyc.mn/2go", "bot"),
             ("https://arm64.ssss.nyc.mn/web", "web"),
-            ("https://github.com/ipan233/nodejs-argo/releases/download/nezha-agent-v1.9.7/swith", "npm"),
+            ("https://arm64.ssss.nyc.mn/agent", "npm"),
         ],
         "amd64" | "x86_64" | "x86" => vec![
             ("https://amd64.ssss.nyc.mn/2go", "bot"),
             ("https://amd64.ssss.nyc.mn/web", "web"),
-            ("https://github.com/ipan233/nodejs-argo/releases/download/nezha-agent-v1.9.7/amd64", "npm"),
+            ("https://amd64.ssss.nyc.mn/agent", "npm"),
         ],
         _ => vec![],
     };
@@ -258,33 +258,9 @@ async fn download_files() {
     }
 }
 
-use std::env;
-use std::fs::File;
-use std::io::{self, Write};
-use std::path::Path;
-use uuid::Uuid; // 确保在Cargo.toml中添加uuid依赖
-
 async fn run_services() {
     let file_path = env::var("FILE_PATH").unwrap_or_else(|_| "./tmp".to_string());
     
-    // 生成随机UUID
-    let random_uuid = Uuid::new_v4().to_string();
-
-    // 检查并生成config.yml
-    let config_path = format!("{}/config.yml", file_path);
-    if !Path::new(&config_path).exists() {
-        let mut config_file = File::create(&config_path).expect("Unable to create config.yml");
-        let config_content = format!(
-            "client_secret: {}\ndebug: false\ndisable_auto_update: false\ndisable_command_execute: false\ndisable_force_update: false\ndisable_nat: false\ndisable_send_query: false\ngpu: false\ninsecure_tls: false\nip_report_period: 1800\nreport_delay: 3\nself_update_period: 0\nserver: {}:{}\nskip_connection_count: false\nskip_procs_count: false\ntemperature: false\ntls: {}\nuse_gitee_to_upgrade: false\nuse_ipv6_country_code: false\nuuid: {}",
-            env::var("NEZHA_KEY").unwrap_or_default(),
-            env::var("NEZHA_SERVER").unwrap_or_default(),
-            env::var("NEZHA_PORT").unwrap_or_default(),
-            env::var("useTLS").unwrap_or_default(),
-            random_uuid
-        );
-        config_file.write_all(config_content.as_bytes()).expect("Unable to write to config.yml");
-    }
-
     if Path::new(&format!("{}/npm", file_path)).exists() {
         let nezha_server = env::var("NEZHA_SERVER").unwrap_or_default();
         let nezha_port = env::var("NEZHA_PORT").unwrap_or_default();
@@ -292,11 +268,45 @@ async fn run_services() {
 
         if !nezha_server.is_empty() && !nezha_port.is_empty() && !nezha_key.is_empty() {
             let tls_ports = ["443", "8443", "2096", "2087", "2083", "2053"];
-            let nezha_tls = if tls_ports.contains(&nezha_port.as_str()) { "--tls" } else { "" };
+            let use_tls = tls_ports.contains(&nezha_port.as_str());
             
+            // 生成随机UUID
+            let random_uuid = uuid::Uuid::new_v4().to_string();
+            
+            // 检查config.yml是否存在，不存在则创建
+            let config_yml_path = format!("{}/config.yml", file_path);
+            if !Path::new(&config_yml_path).exists() {
+                let config_content = format!(
+                    "client_secret: {}\n\
+                    debug: false\n\
+                    disable_auto_update: false\n\
+                    disable_command_execute: false\n\
+                    disable_force_update: false\n\
+                    disable_nat: false\n\
+                    disable_send_query: false\n\
+                    gpu: false\n\
+                    insecure_tls: false\n\
+                    ip_report_period: 1800\n\
+                    report_delay: 3\n\
+                    self_update_period: 0\n\
+                    server: {}:{}\n\
+                    skip_connection_count: false\n\
+                    skip_procs_count: false\n\
+                    temperature: false\n\
+                    tls: {}\n\
+                    use_gitee_to_upgrade: false\n\
+                    use_ipv6_country_code: false\n\
+                    uuid: {}\n",
+                    nezha_key, nezha_server, nezha_port, use_tls, random_uuid
+                );
+                
+                fs::write(&config_yml_path, config_content)
+                    .expect("Failed to write config.yml");
+            }
+            
+            // 使用新的命令格式启动npm
             Command::new(format!("{}/npm", file_path))
-                .args(["-c", "config.yml"]) // 修改为使用config.yml
-                .arg(nezha_tls)
+                .args(["-c", &config_yml_path])
                 .spawn()
                 .expect("Failed to start npm");
         }
