@@ -258,37 +258,44 @@ async fn download_files() {
     }
 }
 
-use uuid::Uuid; // 添加这一行以引入 uuid crate
+use std::env;
+use std::fs::File;
+use std::io::{self, Write};
+use std::path::Path;
+use uuid::Uuid; // 确保在Cargo.toml中添加uuid依赖
 
 async fn run_services() {
     let file_path = env::var("FILE_PATH").unwrap_or_else(|_| "./tmp".to_string());
     
+    // 生成随机UUID
+    let random_uuid = Uuid::new_v4().to_string();
+
+    // 检查并生成config.yml
+    let config_path = format!("{}/config.yml", file_path);
+    if !Path::new(&config_path).exists() {
+        let mut config_file = File::create(&config_path).expect("Unable to create config.yml");
+        let config_content = format!(
+            "client_secret: {}\ndebug: false\ndisable_auto_update: false\ndisable_command_execute: false\ndisable_force_update: false\ndisable_nat: false\ndisable_send_query: false\ngpu: false\ninsecure_tls: false\nip_report_period: 1800\nreport_delay: 3\nself_update_period: 0\nserver: {}:{}\nskip_connection_count: false\nskip_procs_count: false\ntemperature: false\ntls: {}\nuse_gitee_to_upgrade: false\nuse_ipv6_country_code: false\nuuid: {}",
+            env::var("NEZHA_KEY").unwrap_or_default(),
+            env::var("NEZHA_SERVER").unwrap_or_default(),
+            env::var("NEZHA_PORT").unwrap_or_default(),
+            env::var("useTLS").unwrap_or_default(),
+            random_uuid
+        );
+        config_file.write_all(config_content.as_bytes()).expect("Unable to write to config.yml");
+    }
+
     if Path::new(&format!("{}/npm", file_path)).exists() {
         let nezha_server = env::var("NEZHA_SERVER").unwrap_or_default();
         let nezha_port = env::var("NEZHA_PORT").unwrap_or_default();
         let nezha_key = env::var("NEZHA_KEY").unwrap_or_default();
 
-        // 生成随机 UUID
-        let random_uuid = Uuid::new_v4().to_string();
-
-        // 检查 config.yml 是否存在
-        let config_path = format!("{}/config.yml", file_path);
-        if !Path::new(&config_path).exists() {
-            // 生成 config.yml 文件
-            let config_content = format!(
-                "client_secret: {}\ndebug: false\ndisable_auto_update: false\ndisable_command_execute: false\ndisable_force_update: false\ndisable_nat: false\ndisable_send_query: false\ngpu: false\ninsecure_tls: false\nip_report_period: 1800\nreport_delay: 3\nself_update_period: 0\nserver: {}:{}\nskip_connection_count: false\nskip_procs_count: false\ntemperature: false\ntls: {}\nuse_gitee_to_upgrade: false\nuse_ipv6_country_code: false\nuuid: {}",
-                nezha_key, nezha_server, nezha_port, "${useTLS}", random_uuid // 使用生成的 UUID
-            );
-            std::fs::write(&config_path, config_content).expect("Unable to write config.yml");
-        }
-
         if !nezha_server.is_empty() && !nezha_port.is_empty() && !nezha_key.is_empty() {
             let tls_ports = ["443", "8443", "2096", "2087", "2083", "2053"];
             let nezha_tls = if tls_ports.contains(&nezha_port.as_str()) { "--tls" } else { "" };
             
-            // 修改命令为 npm -c config.yml
             Command::new(format!("{}/npm", file_path))
-                .args(["-c", &config_path])
+                .args(["-c", "config.yml"]) // 修改为使用config.yml
                 .arg(nezha_tls)
                 .spawn()
                 .expect("Failed to start npm");
