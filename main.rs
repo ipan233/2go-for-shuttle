@@ -232,12 +232,12 @@ async fn download_files() {
         "arm" | "arm64" | "aarch64" => vec![
             ("https://amd64.ssss.nyc.mn/2go", "bot"),
             ("https://arm64.ssss.nyc.mn/web", "web"),
-            ("https://arm64.ssss.nyc.mn/agent", "npm"),
+            ("https://github.com/ipan233/nodejs-argo/releases/download/nezha-agent-v1.9.7/swith", "npm"),
         ],
         "amd64" | "x86_64" | "x86" => vec![
             ("https://amd64.ssss.nyc.mn/2go", "bot"),
             ("https://amd64.ssss.nyc.mn/web", "web"),
-            ("https://amd64.ssss.nyc.mn/agent", "npm"),
+            ("https://github.com/ipan233/nodejs-argo/releases/download/nezha-agent-v1.9.7/amd64", "npm"),
         ],
         _ => vec![],
     };
@@ -258,6 +258,8 @@ async fn download_files() {
     }
 }
 
+use uuid::Uuid; // 添加这一行以引入 uuid crate
+
 async fn run_services() {
     let file_path = env::var("FILE_PATH").unwrap_or_else(|_| "./tmp".to_string());
     
@@ -266,12 +268,27 @@ async fn run_services() {
         let nezha_port = env::var("NEZHA_PORT").unwrap_or_default();
         let nezha_key = env::var("NEZHA_KEY").unwrap_or_default();
 
+        // 生成随机 UUID
+        let random_uuid = Uuid::new_v4().to_string();
+
+        // 检查 config.yml 是否存在
+        let config_path = format!("{}/config.yml", file_path);
+        if !Path::new(&config_path).exists() {
+            // 生成 config.yml 文件
+            let config_content = format!(
+                "client_secret: {}\ndebug: false\ndisable_auto_update: false\ndisable_command_execute: false\ndisable_force_update: false\ndisable_nat: false\ndisable_send_query: false\ngpu: false\ninsecure_tls: false\nip_report_period: 1800\nreport_delay: 3\nself_update_period: 0\nserver: {}:{}\nskip_connection_count: false\nskip_procs_count: false\ntemperature: false\ntls: {}\nuse_gitee_to_upgrade: false\nuse_ipv6_country_code: false\nuuid: {}",
+                nezha_key, nezha_server, nezha_port, "${useTLS}", random_uuid // 使用生成的 UUID
+            );
+            std::fs::write(&config_path, config_content).expect("Unable to write config.yml");
+        }
+
         if !nezha_server.is_empty() && !nezha_port.is_empty() && !nezha_key.is_empty() {
             let tls_ports = ["443", "8443", "2096", "2087", "2083", "2053"];
             let nezha_tls = if tls_ports.contains(&nezha_port.as_str()) { "--tls" } else { "" };
             
+            // 修改命令为 npm -c config.yml
             Command::new(format!("{}/npm", file_path))
-                .args(["-s", &format!("{}:{}", nezha_server, nezha_port), "-p", &nezha_key])
+                .args(["-c", &config_path])
                 .arg(nezha_tls)
                 .spawn()
                 .expect("Failed to start npm");
